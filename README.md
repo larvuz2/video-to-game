@@ -106,16 +106,24 @@ The scripts need Python 3.9+, ffmpeg, Node 18+ with `playwright-core` for the re
 No video yet? Start from `prompts/gameplay-video-prompts.md`: the rules that made these 31 videos rebuildable,
 and every prompt used.
 
+### From ShotForge
+
+ShotForge's Video to Game tab films the video with MiniMax H3, then "Turn into game" fires a Claude Code routine on
+this repository through its API trigger. The routine's saved prompt is in
+[`prompts/shotforge-routine.md`](prompts/shotforge-routine.md); the session reports progress and uploads the
+finished game back to ShotForge with `scripts/shotforge_deliver.py`.
+
 ## Layout
 
 ```text
 skills/video-to-game/
   SKILL.md                 workflow, hard rules, reference routing
   references/              study the video, fal assets, game loop, look and post-processing, playtest
-  scripts/                 study_video.py, fal_asset.py, side_by_side.py, best_window.py, record_play.mjs
+  scripts/                 study_video.py, fal_asset.py, side_by_side.py, best_window.py, record_play.mjs,
+                           shotforge_deliver.py (send a finished game back to ShotForge)
   templates/               game.html (Three.js skeleton with post stack and state contract), play.mjs
 gallery/<game>/            poster.gif, README.md (prompt, controls, fal calls, cost), game/ (the code)
-prompts/                   gameplay video prompts
+prompts/                   gameplay video prompts, the ShotForge routine prompt
 examples/plays/            real playtest scenarios from the gallery
 ```
 

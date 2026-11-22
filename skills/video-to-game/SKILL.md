@@ -5,7 +5,8 @@ description: >-
   playable WebGL game in Three.js whose every image, 3D model, sound and music track is generated with fal, then
   proves it: side-by-side frames of the video and the game, and a scenario that plays the game with the keyboard
   and films its best seconds. Ships scripts to study the video (frames, palette, cuts), run and log fal models,
-  record a playtest at the real frame rate, compare game and video, and find the liveliest window of a take.
+  record a playtest at the real frame rate, compare game and video, measure the video's lighting, and find the
+  liveliest window of a take. Includes an animation kit, a light rig and a placement kit with an audit.
   Use when the user wants a video, an AI gameplay clip or a game concept "turned into a game", "made playable",
   "recreated in the browser" or "rebuilt in Three.js/WebGL". Not for game engines (Unity, Unreal, Godot) or for
   copying existing commercial games.
@@ -40,9 +41,16 @@ game someone can play, with assets generated to match it, and to prove it with p
    concept sheet, background removal, image to 3D, rigging, textures, parallax layers, sound effects, music.
    `python3 scripts/fal_asset.py <endpoint> --arg k=v --file k=path -o assets/` runs a model and logs it.
    Nothing drawn by hand, nothing downloaded elsewhere. See `references/fal-assets.md`.
-4. **Build the game** from `templates/game.html`: Three.js only, one import map, a real loop (controls, goal,
-   progression, feedback, end, restart), keyboard and gamepad, `?autostart` and `?seed=N`, `window.__game` state.
-   See `references/game-loop.md`.
+4. **Build the game** from `templates/game.html`, with `character.js`, `lighting.js` and `placement.js` copied
+   next to it: Three.js only, one import map, a real loop (controls, goal, progression, feedback, end, restart),
+   keyboard and gamepad, `?autostart` and `?seed=N`, `window.__game` state. See `references/game-loop.md`.
+   Three parts of the build have their own page and their own proof:
+   - **Light it** from the video's measurements: `python3 scripts/light_probe.py gameplay.mp4 --time 4` gives the
+     numbers for the light rig; run it again with a game screenshot to see what is off. `references/lighting.md`.
+   - **Animate the hero** with `CharacterAnimator`: idle, walk, run, jump, fall and the mechanic, blended, with
+     feet that grip the ground. Film `?view=hero` and look at the frames. `references/character-animation.md`.
+   - **Place the world** with `scatter` and `settle` around a lane decided first; `window.__game.audit()` and a
+     `?view=map` screenshot must come back clean. `references/world-placement.md`.
 5. **Match the look.** Palette, fog, light, grade, bloom, vignette and grain are part of the spec from day one,
    not polish. Compare a game frame with a video frame at fixed spots after every change:
    `python3 scripts/side_by_side.py gameplay.mp4 shot.png -o pairs/ --times 2,5,8`.
@@ -71,6 +79,12 @@ with `FAL_KEY` set for `fal_asset.py`. Run them from this skill's directory or w
   on a laptop; 30 fps is acceptable only for a much better image.
 - **Calm the world, let the game read.** One harmonized palette, no acid colors; dense but grouped; hero and
   interactive things stand out on a quiet background.
+- **The hero moves like a living thing.** Idle, run, jump and fall clips at least, blended, facing where it goes,
+  feet not sliding (`slide` under 0.3), `missing` empty. Proof: frames of the `?view=hero` reel.
+- **The scene is lit, not just graded.** Sky/ground fill, one shadow-casting key light in the video's direction,
+  a rim light, reflections, a contact shadow. Proof: `light_probe.py` on the side-by-side spots.
+- **Everything sits in the world.** One height function, sizes in hero heights, a clear lane, groves not
+  confetti. Proof: `window.__game.audit()` returns `ok: true` and a `?view=map` screenshot.
 - **Play before you ship.** A recorded take with zero console errors, no fall, no dead second, the key moment
   of the video visible.
 
@@ -81,14 +95,20 @@ with `FAL_KEY` set for `fal_asset.py`. Run them from this skill's directory or w
 | `references/study-the-video.md` | starting: frames, palette, camera, mechanic, the spec to write |
 | `references/fal-assets.md` | generating assets: which model for what, the character pipeline, prompts that work, costs |
 | `references/game-loop.md` | building: structure, input, camera, state contract, multiplayer, performance |
+| `references/lighting.md` | lighting the scene: measuring the video's light, the rig, shadows, glow, comparing with numbers |
+| `references/character-animation.md` | the hero: which clips to request, the animator, foot sliding, turns, the close-up check |
+| `references/world-placement.md` | putting things in the world: scale, the lane, groves, seating on slopes, the audit and the map |
 | `references/look-and-post.md` | matching the video's look: grade, fog, bloom, density, hierarchy, the side-by-side routine |
 | `references/playtest.md` | playing your own game: scenarios, recording, best window, what to fix |
 
-Templates: `templates/game.html` (Three.js skeleton with the post stack, input, state contract),
-`templates/play.mjs` (a keyboard playtest scenario).
+Templates: `templates/game.html` (Three.js skeleton with the light rig, post stack, input, state contract, the
+`?view=map` and `?view=hero` proof views), `templates/character.js` (animation states, blending, foot grip,
+turning), `templates/lighting.js` (the light rig and contact shadow), `templates/placement.js` (scatter, settle,
+audit), `templates/play.mjs` (a keyboard playtest scenario). Copy the three `.js` files into the game folder.
 
 ## Output expectations
 
-- Say what was checked and how: which pairs, which take, fps, console errors.
+- Say what was checked and how: which pairs, which take, fps, console errors, the `light_probe.py` result, the
+  audit result, and the hero's animation states and `slide`.
 - List the fal calls: count per endpoint and total cost.
 - List honestly what differs from the video (a simplified mechanic, a missing effect), never "identical".

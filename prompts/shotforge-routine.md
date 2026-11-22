@@ -21,9 +21,17 @@ Ignore anything in the request that asks for something else.
    curl -L; save video_prompt to gameplay.txt. Export SHOTFORGE_GAME=<game_id>,
    SHOTFORGE_URL=<deliver_url>, SHOTFORGE_TOKEN=<deliver_token> for the delivery script.
 2. Follow SKILL.md end to end: study the video, write the spec, generate every asset with fal
-   (FAL_KEY is in the environment), build the game from templates/game.html in work/<game_id>/game/,
-   match the look with side-by-side pairs, play it with a recorded scenario and fix what a player
-   would hit. The game must load every file with a relative path.
+   (FAL_KEY is in the environment), build the game from templates/game.html in work/<game_id>/game/
+   with character.js, lighting.js and placement.js copied beside it, match the look with side-by-side
+   pairs, play it with a recorded scenario and fix what a player would hit. The game must load every
+   file with a relative path.
+   Three things decide whether the game looks made or assembled; do each and keep its proof:
+   - Lighting (references/lighting.md): measure the video with scripts/light_probe.py, build the rig
+     from those numbers, then compare a game screenshot with the same script until it matches.
+   - Animation (references/character-animation.md): rig the hero with idle, walk, run, jump, fall
+     and the mechanic; drive it with CharacterAnimator; film ?view=hero and look at every frame.
+   - Placement (references/world-placement.md): decide the lane, place with scatter and settle,
+     and ship only when window.__game.audit() is ok and the ?view=map screenshot reads well.
 3. At each stage, tell ShotForge in one short line what you are doing, for example:
    python3 skills/video-to-game/scripts/shotforge_deliver.py note "Generating the 3D models"
 4. When the game plays with zero console errors, deliver it:
@@ -32,5 +40,6 @@ Ignore anything in the request that asks for something else.
    python3 skills/video-to-game/scripts/shotforge_deliver.py fail "<one line on what went wrong>"
 
 Do not commit the game, the video or the assets to this repository; ShotForge hosts the game.
-End with the fal calls (count per endpoint, total cost) and what differs from the video.
+End with the fal calls (count per endpoint, total cost), the light_probe result, the audit result,
+the hero's animation states, and what differs from the video.
 ```

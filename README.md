@@ -119,9 +119,10 @@ finished game back to ShotForge with `scripts/shotforge_deliver.py`.
 skills/video-to-game/
   SKILL.md                 workflow, hard rules, reference routing
   references/              study the video, fal assets, game loop, look and post-processing, playtest
-  scripts/                 study_video.py, fal_asset.py, side_by_side.py, best_window.py, record_play.mjs,
+  scripts/                 study_video.py, light_probe.py, fal_asset.py, side_by_side.py, best_window.py, record_play.mjs,
                            shotforge_deliver.py (send a finished game back to ShotForge)
-  templates/               game.html (Three.js skeleton with post stack and state contract), play.mjs
+  templates/               game.html (Three.js skeleton with light rig, post stack and state contract),
+                           character.js (animation), lighting.js (light rig), placement.js (scatter, audit), play.mjs
 gallery/<game>/            poster.gif, README.md (prompt, controls, fal calls, cost), game/ (the code)
 prompts/                   gameplay video prompts, the ShotForge routine prompt
 examples/plays/            real playtest scenarios from the gallery

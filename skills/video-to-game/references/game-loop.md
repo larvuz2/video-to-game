@@ -1,8 +1,9 @@
 # Build the game
 
-Start from `templates/game.html`. One `index.html`, an `assets/` folder, Three.js from a pinned import map
+Start from `templates/game.html` and copy `templates/character.js`, `lighting.js` and `placement.js` beside it.
+One `index.html`, those three modules, an `assets/` folder, Three.js from a pinned import map
 (`three@0.160.0` on jsDelivr) and its examples (GLTFLoader, EffectComposer). No other library, no engine,
-no build step: the file opens from any static server.
+no build step: the folder opens from any static server.
 
 ## A real loop, not a scene
 

@@ -30,6 +30,12 @@ frame rate (it prints it, with the console errors). `best_window.py` ranks windo
 then extract a frame every 0.25 s of the winner and look at every one. Reject a window if a single frame shows a
 title or tip text, a cut-off or tiny hero, a shaking camera, a fall, a step back or a glitch.
 
+## Three more takes of proof
+
+- `?view=hero` filmed for 13 s: the animation reel (`character-animation.md`).
+- `?view=map` screenshot and `window.__game.audit()`: placement (`world-placement.md`).
+- `python3 scripts/light_probe.py gameplay.mp4 shot.png --time T` at the three side-by-side spots (`lighting.md`).
+
 ## What to fix after watching
 
 - A dead second: the level is too empty there, or the scenario waits too long.

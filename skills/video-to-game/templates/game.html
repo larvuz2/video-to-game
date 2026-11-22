@@ -18,10 +18,14 @@
 </head>
 <body>
 <script type="module">
-// Skeleton for a game rebuilt from a gameplay video. Keep its contract:
+// Skeleton for a game rebuilt from a gameplay video. Copy character.js, lighting.js and placement.js next to
+// this file. Keep its contract:
 //  - ?autostart skips the title, ?seed=N fixes the level, so a scenario can play it the same way twice;
-//  - window.__game exposes read-only state (player position, speed, phase) for the playtest scenarios;
-//  - the look lives in one place: PALETTE, fog, lights and the post stack, all matched to the video's frames.
+//  - window.__game exposes read-only state (position, speed, phase, animation) for the playtest scenarios,
+//    and window.__game.audit() lists placement mistakes;
+//  - ?view=map looks straight down at the whole level, ?view=hero puts the camera on the character and walks
+//    it through every animation: the two pictures that prove placement and animation;
+//  - the look lives in one place: LOOK (from scripts/light_probe.py on the video), the light rig, the post stack.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -29,30 +33,37 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { CharacterAnimator, normalizeModel } from './character.js';
+import { buildLightRig, contactShadow } from './lighting.js';
+import { rng, scatter, settle, audit } from './placement.js';
 
 const Q = new URLSearchParams(location.search);
-let seed = +(Q.get('seed') || 1);
-const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+const VIEW = Q.get('view');                      // null (the game), 'map' or 'hero'
+const rand = rng(+(Q.get('seed') || 1));
 
-// sampled from the video with study_video.py: sky, horizon haze, ground, hero accent
-const PALETTE = { sky: 0xd8c4b5, haze: 0xc9b4a9, ground: 0x4f6b3a, accent: 0xc8402a };
+// Measured on the video: python3 scripts/light_probe.py gameplay.mp4 --time <steady shot>
+const LOOK = {
+  sky: 0x7fa6d6, haze: 0xb9cbdc, ground: 0x4f6b3a, accent: 0xc8402a, keyColor: 0xfff1dd,
+  azimuth: 35, elevation: 40, keyIntensity: 2.6, fillIntensity: 0.8, soft: false, exposure: 1.0,
+  fogNear: 40, fogFar: 260,
+};
+const HERO_HEIGHT = 1.7;                         // metres; every other size is judged against it
+// Walk and run speed in metres per second. Once the hero's clips load these become the speeds the clips were
+// made for, so the feet grip the ground. Tune the level to the character, not the character to the level.
+const PACE = { walk: 1.8, run: 6 };
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true;
+renderer.toneMappingExposure = LOOK.exposure;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(PALETTE.sky);
-scene.fog = new THREE.Fog(PALETTE.haze, 40, 260);   // aerial perspective: far things melt into the haze
+scene.background = new THREE.Color(LOOK.sky);
+scene.fog = new THREE.Fog(LOOK.haze, LOOK.fogNear, LOOK.fogFar);   // aerial perspective: far things melt into the haze
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 2000);
-
-const sun = new THREE.DirectionalLight(0xfff1dd, 2.4);
-sun.position.set(30, 60, 20); sun.castShadow = true;
-scene.add(sun, new THREE.HemisphereLight(PALETTE.sky, PALETTE.ground, 0.9));
+const rig = buildLightRig(scene, renderer, LOOK);
 
 // post stack, part of the spec from day one: bloom, then one grade + vignette + grain pass
 const composer = new EffectComposer(renderer);
@@ -71,18 +82,74 @@ const grade = new ShaderPass({
 composer.addPass(grade);
 composer.addPass(new OutputPass());
 
-// world: replace with the fal assets (GLB from image-to-3D, textures from the image model)
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 1 }));
-ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-const hero = new THREE.Group();
-const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1, 6, 12), new THREE.MeshStandardMaterial({ color: PALETTE.accent }));
-body.position.y = 0.9; body.castShadow = true; hero.add(body); scene.add(hero);
-for (let i = 0; i < 60; i++) {
-  const r = new THREE.Mesh(new THREE.DodecahedronGeometry(1 + rand() * 2), new THREE.MeshStandardMaterial({ color: 0x8a8070, flatShading: true }));
-  r.position.set((rand() - .5) * 300, 0.5, -rand() * 300); r.castShadow = true; scene.add(r);
+// ---- world -------------------------------------------------------------------------------------------
+// One height function for everything: the ground mesh, where things sit, where the hero stands.
+const heightAt = (x, z) => 1.6 * Math.sin(x / 26) * Math.cos(z / 31) + 0.6 * Math.sin((x + z) / 9);
+const AREA = { minX: -150, maxX: 150, minZ: -300, maxZ: 20 };
+// The path the player takes. Nothing solid is placed on it; landmarks sit beside it and at its end.
+const LANE = { points: [{ x: 0, z: 10 }, { x: 8, z: -90 }, { x: -10, z: -190 }, { x: 0, z: -290 }], width: 9 };
+
+const groundGeo = new THREE.PlaneGeometry(AREA.maxX - AREA.minX, AREA.maxZ - AREA.minZ, 120, 128);
+groundGeo.rotateX(-Math.PI / 2);
+groundGeo.translate((AREA.minX + AREA.maxX) / 2, 0, (AREA.minZ + AREA.maxZ) / 2);
+for (let i = 0, p = groundGeo.attributes.position; i < p.count; i++) p.setY(i, heightAt(p.getX(i), p.getZ(i)));
+groundGeo.computeVertexNormals();
+const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color: LOOK.ground, roughness: 1 }));
+ground.receiveShadow = true; scene.add(ground);
+
+// Everything placed in the world is recorded here, so the audit can check it.
+const PLACED = [];
+// Expected height of each kind of thing, in hero heights (references/world-placement.md).
+const SIZES = { tree: [2, 6], rock: [0.2, 1.6] };
+function place(kind, mesh, item, { height, footprint, follow = 0 }) {
+  const sit = settle(heightAt, item.x, item.z, { footprint, follow });
+  mesh.position.set(item.x, sit.y, item.z);
+  mesh.rotation.set(sit.tiltX, item.rot, sit.tiltZ, 'YXZ');
+  mesh.scale.setScalar(item.scale);
+  scene.add(mesh);
+  PLACED.push({ name: `${kind}-${PLACED.length}`, kind, x: item.x, y: sit.y, z: item.z, radius: item.radius, height: height * item.scale });
 }
-const loader = new GLTFLoader();
-// loader.load('assets/hero.glb', g => { hero.remove(body); hero.add(g.scene); });
+// Replace these stand-ins with the fal assets; keep the calls. Trees in groves, rocks loose between them.
+const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1 });
+const leafMat = new THREE.MeshStandardMaterial({ color: 0x3f5f37, roughness: 1, flatShading: true });
+const trees = scatter({ rand, count: 150, area: AREA, radius: 1.6, clusters: 11, clusterRadius: 15, lane: LANE, laneMargin: 1.5, alongLane: 26, heightAt, maxSlope: 22 });
+for (const t of trees) {
+  const tree = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, 2.6, 7), trunkMat); trunk.position.y = 1.3;
+  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(1.9, 0), leafMat.clone()); crown.position.y = 3.9;
+  crown.material.color.offsetHSL(0, 0, t.tint);
+  tree.add(trunk, crown); rig.castAndReceive(tree);
+  place('tree', tree, t, { height: 5.8, footprint: 0.4 });          // upright: trees do not lean with the hill
+}
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x8a8070, roughness: 1, flatShading: true });
+for (const r of scatter({ rand, count: 70, area: AREA, radius: 0.9, lane: LANE, occupied: trees, heightAt, scale: [0.5, 1.5] })) {
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9), rockMat);
+  rock.scale.y = 0.7; rig.castAndReceive(rock);
+  place('rock', rock, r, { height: 1.1, footprint: 0.8, follow: 1 }); // rocks lie on the slope and sink into it
+}
+
+// The lane, drawn only in ?view=map, to check at a glance that it is clear and that the world lines it.
+const laneLine = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(LANE.points.map((p) => new THREE.Vector3(p.x, heightAt(p.x, p.z) + 0.6, p.z))),
+  new THREE.LineBasicMaterial({ color: 0xffffff }));
+laneLine.visible = false; scene.add(laneLine);
+
+// ---- hero --------------------------------------------------------------------------------------------
+const hero = new THREE.Group();                                       // the game moves this; the model sits inside
+const standIn = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.9, 6, 12), new THREE.MeshStandardMaterial({ color: LOOK.accent }));
+standIn.position.y = 0.85; standIn.castShadow = true; hero.add(standIn);
+hero.position.set(LANE.points[0].x, heightAt(LANE.points[0].x, LANE.points[0].z), LANE.points[0].z);
+scene.add(hero);
+const blob = contactShadow(0.7); scene.add(blob);
+let anim = null;
+// new GLTFLoader().load('assets/hero.glb', (g) => {
+//   hero.remove(standIn);
+//   hero.add(normalizeModel(rig.castAndReceive(g.scene), { height: HERO_HEIGHT }));
+//   anim = new CharacterAnimator(g.scene, g.animations);
+//   if (anim.speeds.walk) PACE.walk = anim.speeds.walk;
+//   if (anim.speeds.run) PACE.run = anim.speeds.run;
+//   if (anim.missing.length) console.warn('hero has no clip for:', anim.missing.join(', '));
+// });
 
 // input: keyboard + gamepad, read once per frame
 const keys = new Set();
@@ -94,32 +161,68 @@ function input() {
   return {
     x: (keys.has('ArrowRight') || keys.has('KeyD') ? 1 : 0) - (keys.has('ArrowLeft') || keys.has('KeyA') ? 1 : 0) + (Math.abs(ax) > .2 ? ax : 0),
     z: (keys.has('ArrowDown') || keys.has('KeyS') ? 1 : 0) - (keys.has('ArrowUp') || keys.has('KeyW') ? 1 : 0) + (Math.abs(ay) > .2 ? ay : 0),
+    run: keys.has('ShiftLeft') || keys.has('ShiftRight') || !!pad?.buttons[1]?.pressed,
     jump: keys.has('Space') || !!pad?.buttons[0]?.pressed,
     start: keys.has('Enter') || !!pad?.buttons[9]?.pressed,
   };
 }
+// ?view=hero: no keys needed, the character goes through idle, walk, run, a turn and a jump on a loop
+function reel(t) {
+  const k = t % 12;
+  return { x: k > 6 && k < 9 ? Math.sin((k - 6) * 2.1) : 0, z: k < 1.5 ? 0 : -1, run: k > 4, jump: k > 9.5 && k < 9.7, start: true };
+}
 
-const S = { phase: Q.has('autostart') ? 'play' : 'title', pos: hero.position, vel: new THREE.Vector3(), grounded: true, t: 0 };
-window.__game = { get state() { return { phase: S.phase, x: S.pos.x, y: S.pos.y, z: S.pos.z, speed: S.vel.length(), grounded: S.grounded, t: S.t }; } };
+const S = { phase: Q.has('autostart') || VIEW ? 'play' : 'title', pos: hero.position, vel: new THREE.Vector3(), grounded: true, t: 0 };
+window.__game = {
+  get state() {
+    return { phase: S.phase, x: S.pos.x, y: S.pos.y, z: S.pos.z, speed: Math.hypot(S.vel.x, S.vel.z), grounded: S.grounded, t: S.t,
+      ...(anim ? anim.debug : { anim: 'none', slide: 0 }) };
+  },
+  /** Placement mistakes in the current level: floating, buried, overlapping, in the lane, out of scale. */
+  audit: () => audit(PLACED, { heightAt, heroHeight: HERO_HEIGHT, lane: LANE, sizes: SIZES }),
+};
 
 const clock = new THREE.Clock();
+const want = new THREE.Vector3();
 function frame() {
   const dt = Math.min(clock.getDelta(), 1 / 20);
-  const i = input();
+  const i = VIEW === 'hero' ? reel(S.t) : input();
   if (S.phase === 'title' && (i.start || i.jump)) S.phase = 'play';
   if (S.phase === 'play') {
     S.t += dt;
-    S.vel.x = THREE.MathUtils.damp(S.vel.x, i.x * 8, 10, dt);
-    S.vel.z = THREE.MathUtils.damp(S.vel.z, i.z * 8, 10, dt);
+    const top = i.run ? PACE.run : PACE.walk;
+    const len = Math.hypot(i.x, i.z) || 1;                            // diagonals are not faster
+    S.vel.x = THREE.MathUtils.damp(S.vel.x, (i.x / Math.max(1, len)) * top, 9, dt);
+    S.vel.z = THREE.MathUtils.damp(S.vel.z, (i.z / Math.max(1, len)) * top, 9, dt);
     if (i.jump && S.grounded) { S.vel.y = 9; S.grounded = false; }
     S.vel.y -= 24 * dt;
     S.pos.addScaledVector(S.vel, dt);
-    if (S.pos.y <= 0) { S.pos.y = 0; S.vel.y = 0; S.grounded = true; }
+    const floor = heightAt(S.pos.x, S.pos.z);
+    if (S.pos.y <= floor) { S.pos.y = floor; S.vel.y = 0; S.grounded = true; }
+    else if (S.pos.y - floor > 0.15) S.grounded = false;              // walked off a rise
   }
-  // follow camera, same framing as the video: behind, slightly above, looking ahead
-  const want = new THREE.Vector3(S.pos.x, S.pos.y + 4, S.pos.z + 9);
-  camera.position.lerp(want, 1 - Math.exp(-4 * dt));
-  camera.lookAt(S.pos.x, S.pos.y + 1.4, S.pos.z - 6);
+  const speed = Math.hypot(S.vel.x, S.vel.z);
+  if (anim) { anim.update(dt, { speed, grounded: S.grounded, vy: S.vel.y }); anim.face(hero, S.vel.x, S.vel.z, dt); }
+  blob.place(S.pos.x, heightAt(S.pos.x, S.pos.z), S.pos.z, S.pos.y - heightAt(S.pos.x, S.pos.z));
+
+  if (VIEW === 'map') {
+    // straight down on the whole level: groves, gaps and the clear lane read at a glance
+    const cx = (AREA.minX + AREA.maxX) / 2, cz = (AREA.minZ + AREA.maxZ) / 2;
+    camera.position.set(cx, Math.max(AREA.maxX - AREA.minX, (AREA.maxZ - AREA.minZ) / camera.aspect) * 1.15, cz);
+    camera.up.set(0, 0, -1); camera.lookAt(cx, 0, cz);
+    scene.fog.near = 5000; scene.fog.far = 9000; laneLine.visible = true;
+  } else if (VIEW === 'hero') {
+    // three-quarter close-up that travels with the character: feet, turns and landings are all in frame
+    want.set(S.pos.x + 3.2, S.pos.y + 1.6, S.pos.z + 4.6);
+    camera.position.lerp(want, 1 - Math.exp(-8 * dt));
+    camera.lookAt(S.pos.x, S.pos.y + 0.9, S.pos.z);
+  } else {
+    // follow camera, same framing as the video: behind, slightly above, looking ahead
+    want.set(S.pos.x, S.pos.y + 4, S.pos.z + 9);
+    camera.position.lerp(want, 1 - Math.exp(-4 * dt));
+    camera.lookAt(S.pos.x, S.pos.y + 1.4, S.pos.z - 6);
+  }
+  rig.follow(S.pos, camera);
   grade.uniforms.uTime.value += dt;
   composer.render();
   requestAnimationFrame(frame);

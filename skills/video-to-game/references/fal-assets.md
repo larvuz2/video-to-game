@@ -33,8 +33,10 @@ Check endpoint ids and parameters in the live catalog (fal.ai/models) before a f
 4. **To 3D.** `meshy/v7.1/image-to-3d` (`image_url`, options for A/T pose and PBR) or `tripo3d/h3.1/image-to-3d`
    for characters; Hunyuan 3D Pro (`input_image_url`, plus optional back and side views) for detailed props.
    Normalize every GLB on load: scale to a known height, put the feet at y = 0, face -Z.
-5. **Rig and animate.** `fal-ai/meshy/rigging/multi-animation` with `model_url` and `animation_action_ids`
-   (run, jump, idle, glide) and `height_meters`. Keep the clips in one GLB and blend them with an AnimationMixer.
+5. **Rig and animate.** `fal-ai/meshy/rigging/multi-animation` with `model_url`, `height_meters` and
+   `animation_action_ids` for idle, walk, run, jump, an in-air or falling clip, a landing, and the video's
+   mechanic. Keep the clips in one GLB and drive them with `templates/character.js`.
+   See `character-animation.md` for which clips matter and how to check the result.
 
 ## Environments and textures
 

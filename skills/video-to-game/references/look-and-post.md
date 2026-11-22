@@ -13,6 +13,9 @@ and comparing pictures after every change.
 4. Write what differs (too saturated, sky too clean, fog too thick, hero too small), fix one thing, repeat at the
    same three spots. Always the same spots, or you are comparing luck.
 
+Light the scene before grading it: `lighting.md` covers the rig, shadows and measuring the video's light. The
+grade below finishes a lit picture; it cannot rescue an unlit one.
+
 ## Post-processing is part of the build
 
 Set it up with the first scene, not at the end:

@@ -88,6 +88,30 @@ with `FAL_KEY` set for `fal_asset.py`. Run them from this skill's directory or w
 - **Play before you ship.** A recorded take with zero console errors, no fall, no dead second, the key moment
   of the video visible.
 
+## Building for ShotForge: show the work
+
+When `SHOTFORGE_URL` is set, a person is waiting in ShotForge and cannot see this session. Their only view of
+the build is what you send with `scripts/shotforge_deliver.py note`: each note is a line of a live timeline,
+and `--image` puts pictures on it. Treat it as narrating the build to someone who is not a developer.
+
+| When | `--stage` | Say | Attach (`--image`) |
+|---|---|---|---|
+| Frames extracted | `study` | what the video shows: camera, hero, the mechanic | `study/sheet.jpg`, the key-moment frame |
+| Spec written | `spec` | the game in two sentences: what you do, how it ends | |
+| Hero concept, then 3D model | `hero` | what the hero looks like, which model made it | the concept, a render of the model |
+| Props, textures, sky, sound | `assets` / `world` | what was generated and how many | two to four of the best |
+| Light measured and matched | `lighting` | what `light_probe.py` found and what you changed | a side-by-side pair |
+| Hero rigged and moving | `animation` | which clips it has, the foot-slide figure | two frames of the `?view=hero` reel |
+| World placed | `placement` | the audit result | the `?view=map` screenshot |
+| Look matched | `look` | what still differs from the video | the three side-by-side pairs |
+| Played and filmed | `playtest` | frame rate, errors, what you fixed | frames from the best take |
+
+- A note at least every five minutes, and whenever something fails and you try again (say what and why).
+- Plain words, one or two sentences, no file names or commands. "The hero's feet were sliding, so the walk now
+  matches its stride" beats "tuned timeScale".
+- Pictures about 1280 px wide, JPEG, under 1 MB each, at most 6 per note.
+- The last note is the delivery itself (`upload … --note "Ready to play"`).
+
 ## Reference routing
 
 | File | Read when |

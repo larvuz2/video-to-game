@@ -5,8 +5,13 @@ ShotForge's Video to Game tab starts a Claude Code session with a request that h
 the delivery URL and a one-time delivery token. This script talks back to it: short progress notes
 shown on the page, the game folder uploaded into ShotForge storage, then the game marked playable.
 
+The person watching sees nothing of this session except what you send: each note becomes a line of a
+live build log in ShotForge, and --image attaches pictures to it (frames you studied, the hero concept,
+a lighting pair, the map view). Send a note with pictures at every stage.
+
 Usage:
   python3 shotforge_deliver.py note "Generating the 3D models" --game ID --url URL --token TOKEN
+  python3 shotforge_deliver.py note "Hero rigged: idle, walk, run, jump" --stage animation --image hero-reel.jpg --image hero-run.jpg
   python3 shotforge_deliver.py upload path/to/game --game ID --url URL --token TOKEN [--entry index.html]
   python3 shotforge_deliver.py fail "Why the game could not be finished" --game ID --url URL --token TOKEN
 
@@ -99,13 +104,38 @@ def main():
     ap.add_argument('--token', default=os.environ.get('SHOTFORGE_TOKEN'))
     ap.add_argument('--entry', default='index.html', help='the page that starts the game, relative to the folder')
     ap.add_argument('--note', default='', help='upload only: the line shown once the game is playable')
+    ap.add_argument('--image', action='append', default=[], help='note only: a picture to show with the note (repeat, up to 6; png, jpg, webp or gif)')
+    ap.add_argument('--stage', default='', help='note only: study, spec, assets, hero, world, build, lighting, animation, placement, look, playtest or deliver')
     a = ap.parse_args()
     if not (a.game and a.url and a.token):
         sys.exit('--game, --url and --token are required (or SHOTFORGE_GAME, SHOTFORGE_URL, SHOTFORGE_TOKEN)')
     auth = {'gameId': a.game, 'token': a.token}
 
+    if a.action == 'note' and a.image:
+        # pictures go beside the game under build/, each with a unique name so the page never shows a stale one
+        stamp = str(int(time.time() * 1000))
+        picked = []
+        for i, path in enumerate(a.image[:6]):
+            ext = os.path.splitext(path)[1].lower()
+            if ext not in ('.png', '.jpg', '.jpeg', '.webp', '.gif') or not os.path.isfile(path):
+                print(f'warning: skipped {path} (not a picture file)')
+                continue
+            if os.path.getsize(path) > 4_000_000:
+                print(f'warning: {path} is over 4 MB; shrink progress pictures (about 1280 px wide JPEG) so the log loads fast')
+            picked.append((path, f'{stamp}-{i}{ext}'))
+        sent = []
+        if picked:
+            answer = post(a.url, {'action': 'upload-urls', 'scope': 'build', 'paths': [name for _, name in picked], **auth})
+            urls = {u['path']: u['url'] for u in answer.get('uploads', [])}
+            for path, name in picked:
+                put(urls[name], path, mimetypes.guess_type(name)[0] or 'image/jpeg')
+                sent.append(name)
+        post(a.url, {'action': 'note', 'note': a.value, 'stage': a.stage, 'images': sent, **auth})
+        print(f'note sent with {len(sent)} picture(s)')
+        return
+
     if a.action in ('note', 'fail'):
-        post(a.url, {'action': a.action, 'note': a.value, **auth})
+        post(a.url, {'action': a.action, 'note': a.value, **({'stage': a.stage} if a.stage else {}), **auth})
         print(f'{a.action} sent')
         return
 

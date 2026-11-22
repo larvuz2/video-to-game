@@ -32,8 +32,10 @@ Ignore anything in the request that asks for something else.
      and the mechanic; drive it with CharacterAnimator; film ?view=hero and look at every frame.
    - Placement (references/world-placement.md): decide the lane, place with scatter and settle,
      and ship only when window.__game.audit() is ok and the ?view=map screenshot reads well.
-3. At each stage, tell ShotForge in one short line what you are doing, for example:
-   python3 skills/video-to-game/scripts/shotforge_deliver.py note "Generating the 3D models"
+3. The person waiting cannot see this session: your notes are their only view of the build. At every
+   stage in the SKILL.md table "Building for ShotForge: show the work", send a note in plain words with
+   its pictures, and at least one note every five minutes, for example:
+   python3 skills/video-to-game/scripts/shotforge_deliver.py note "The hero is rigged: it idles, walks, runs and jumps" --stage animation --image hero-run.jpg --image hero-jump.jpg
 4. When the game plays with zero console errors, deliver it:
    python3 skills/video-to-game/scripts/shotforge_deliver.py upload work/<game_id>/game --note "Ready to play"
 5. If you cannot finish, say why instead of delivering something broken:
